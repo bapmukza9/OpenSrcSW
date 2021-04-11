@@ -25,11 +25,16 @@ public class searcher {
 	public int id;
 	public Float calcsim;
 	public String title;
+	public ArrayList<Float> queryWeight;
+	public ArrayList<Float> idWeight;
+	public Float cosSim;
 
-	public searcher(int id, Float calcsim, String title) {
+	public searcher(int id, Float calcsim, String title, ArrayList<Float> queryWeight, ArrayList<Float> idWeight) {
 		this.id = id;
 		this.calcsim = calcsim;
 		this.title = title;
+		this.queryWeight = queryWeight;
+		this.idWeight = idWeight;
 	}
 
 	public searcher(String query, String postFile) {
@@ -37,20 +42,34 @@ public class searcher {
 		String postFileLocation = ".\\..\\src\\" + postFile;
 		searcher[] top3List = CalcSim(query, postFileLocation);
 		System.out.println("<Rank>\t<title>\t<id>\t<CalcSim>");
-		
+
 		int rank = 1;
-		for(searcher top : top3List) {
-			if(top == null) {
+		for (searcher top : top3List) {
+			if (top == null) {
 				break;
-			}
-			else {
-				System.out.println(" " + (rank++) +".\t" + top.title+"\t[" + top.id +"]\t " + top.calcsim);
+			} else {
+				System.out.println(" " + (rank++) + ".\t" + top.title + "\t[" + top.id + "]\t " + top.cosSim);
 			}
 		}
 	}
-	
+
 	public static searcher[] CalcSim(String query, String postFile) {
 		searcher[] top3Data = InnerProduct(query, postFile);
+
+		for (int i = 0; i < top3Data.length; i++) {
+			if (top3Data[i] != null) {
+				float sumQ = 0;
+				float sumID = 0;
+				for (int j = 0; j < top3Data[i].queryWeight.size(); j++) {
+					sumQ += Math.pow(top3Data[i].queryWeight.get(j), 2);
+					sumID += Math.pow(top3Data[i].idWeight.get(j), 2);
+				}
+				//System.out.println("calcsim: " + top3Data[i].calcsim + " sumQ: " + Math.sqrt(sumQ) + " sumID: " + Math.sqrt(sumID));
+				top3Data[i].cosSim = (float) (Math.round(top3Data[i].calcsim / (Math.sqrt(sumQ) * Math.sqrt(sumID)) * 100) / 100.0);
+			} else
+				break;
+		}
+
 		return top3Data;
 	}
 
@@ -62,15 +81,14 @@ public class searcher {
 		ArrayList<Float> inputWeight = new ArrayList<>();
 		ArrayList<searcher> totalData = new ArrayList<>();
 
-		KeywordExtractor ke = new KeywordExtractor();
-		KeywordList kl = ke.extractKeyword(query, true);
-		for (Keyword kwrd : kl) {
-			inputKeyword.add(kwrd.getString());
-			inputWeight.add((float) 1);
-			// System.out.println(kwrd.getString());
-		}
-
 		try {
+			KeywordExtractor ke = new KeywordExtractor();
+			KeywordList kl = ke.extractKeyword(query, true);
+			for (Keyword kwrd : kl) {
+				inputKeyword.add(kwrd.getString());
+				inputWeight.add((float) 1);
+			}
+			
 			FileInputStream fileStream = new FileInputStream(postFile);
 			ObjectInputStream objectInputStream = new ObjectInputStream(fileStream);
 
@@ -87,17 +105,22 @@ public class searcher {
 
 			for (int i = 0; i < everyTitle.size(); i++) {
 				float calcsim = 0;
+				ArrayList<Float> queryWeight = new ArrayList<>();
+				ArrayList<Float> idWeight = new ArrayList<>();
 				for (int j = 0; j < inputKeyword.size(); j++) {
 					if (hashMap.containsKey(inputKeyword.get(j))) {
 						for (int z = 0; z < hashMap.get(inputKeyword.get(j)).size(); z++) {
 							if (Integer.toString(i).equals(hashMap.get(inputKeyword.get(j)).get(z).id)) {
 								calcsim += inputWeight.get(j) * hashMap.get(inputKeyword.get(j)).get(z).TF_IDF;
+								idWeight.add(hashMap.get(inputKeyword.get(j)).get(z).TF_IDF);
+								queryWeight.add(inputWeight.get(j));
 							}
 						}
 					}
 				}
-				if(calcsim != 0) {
-					totalData.add(new searcher(i, (float) (Math.round(calcsim * 100) / 100.0), everyTitle.get(i).text()));
+				if (calcsim != 0) {
+					totalData.add(new searcher(i, (float) (Math.round(calcsim * 100) / 100.0), everyTitle.get(i).text(),
+							queryWeight, idWeight));
 				}
 			}
 			objectInputStream.close();
@@ -110,32 +133,29 @@ public class searcher {
 		}
 
 		searcher[] top3Data = new searcher[3];
-		
+
 		Collections.sort(totalData, new Comparator() {
 
 			@Override
 			public int compare(Object s1, Object s2) {
-				float a = (float)((searcher)s1).calcsim;
-				float b = (float)((searcher)s2).calcsim;
+				float a = (float) ((searcher) s1).calcsim;
+				float b = (float) ((searcher) s2).calcsim;
 				int check = 0;
-				if(a == b){
+				if (a == b) {
 					check = 0;
-				}
-				else if(a < b) {
+				} else if (a < b) {
 					check = 1;
-				}
-				else {
+				} else {
 					check = -1;
 				}
 				return check;
 			}
 
 		});
-		
-		for(int i = 0, size = totalData.size()>top3Data.length?top3Data.length:totalData.size(); i < size; i++) {
+
+		for (int i = 0, size = totalData.size() > top3Data.length ? top3Data.length : totalData.size(); i < size; i++) {
 			top3Data[i] = totalData.get(i);
 		}
 		return top3Data;
 	}
-
 }
